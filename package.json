@@ -1,0 +1,11 @@
+{
+  "name": "agentic-loop-orchestrator",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node orchestrator.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0"
+  }
+}

@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Session logs — local only, never push
+logs/
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
