@@ -23,10 +23,22 @@ Agregar estas líneas al `CLAUDE.md` de cada proyecto:
 
 ```markdown
 ## Agentic Loop
+Perfil: https://raw.githubusercontent.com/jonncy18-maker/agentic-loop/main/CODER_PROFILE.md
 Protocolo: https://raw.githubusercontent.com/jonncy18-maker/agentic-loop/main/AGENTIC_LOOP.md
 Orquestador: https://raw.githubusercontent.com/jonncy18-maker/agentic-loop/main/orchestrator.js
-Al inicio de cada sesión, leer el protocolo completo desde la URL de arriba.
+Al inicio de cada sesión, leer el perfil y el protocolo completos desde las URLs de arriba.
 ```
+
+### Perfil vs. loop
+
+Son dos capas distintas y complementarias:
+
+| | Aplica a | Gobierna |
+|---|---|---|
+| `CODER_PROFILE.md` | Toda tarea, sin umbral | Cómo se escribe el código y cómo se verifica |
+| `AGENTIC_LOOP.md` | Tareas sobre el umbral de activación | Si se construyó lo correcto, con audit aislado |
+
+El contrato de Fase 2 nunca necesita repetir nada del perfil — el perfil ya está cargado.
 
 ### Estrategia de versioning
 

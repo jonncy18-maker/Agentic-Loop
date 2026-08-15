@@ -6,6 +6,7 @@ Este repo es una herramienta personal reutilizable. No es un proyecto de product
 
 - `orchestrator.js` — script Node.js que ejecuta el Agentic Loop de 6 fases llamando la API de Anthropic directamente
 - `AGENTIC_LOOP.md` — protocolo completo del loop, referenciado desde el CLAUDE.md de cada proyecto
+- `CODER_PROFILE.md` — perfil de coding: estándar de verificación y convenciones que aplican a toda tarea, sin umbral. Se carga siempre; el loop se activa solo sobre el umbral
 - `package.json` — dependencia única: `@anthropic-ai/sdk`
 - `logs/` — artefactos de sesión locales, no se suben a GitHub
 
@@ -19,6 +20,7 @@ Este repo es una herramienta personal reutilizable. No es un proyecto de product
 
 - **`orchestrator.js`** — cualquier cambio aquí se propaga a todos los proyectos. Testear antes de pushear. Crear un git tag antes de breaking changes.
 - **`AGENTIC_LOOP.md`** — si cambia la lógica del loop (fases, reglas de iteración, formato de output), actualizar el MD en el mismo commit.
+- **`CODER_PROFILE.md`** — cambia poco y deliberadamente. Una regla se gana el lugar por haber sido violada en trabajo real, no por sonar correcta. No duplicar acá nada que ya viva en el contrato de Fase 2.
 - **`package.json`** — no agregar dependencias sin razón fuerte. El objetivo es que el orchestrator sea liviano. Commitear `package-lock.json` para installs determinísticos.
 - **`logs/`** — nunca commitear. Está en `.gitignore`.
 
