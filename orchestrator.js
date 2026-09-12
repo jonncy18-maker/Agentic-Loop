@@ -21,10 +21,31 @@ import fs from "fs";
 import path from "path";
 import readline from "readline";
 import crypto from "crypto";
+import { pathToFileURL } from "url";
+import { parseVerdict, hasBlocker } from "./verdict.js";
 
 // ─── Config ────────────────────────────────────────────────────────────────
 
-const MODEL = "claude-sonnet-4-6";
+// Per-role models. Reasoning-heavy roles (contract authoring, audit judgment) get the
+// stronger model; bulk file emission does not need it. Override any role via env var.
+const DEFAULT_MODELS = {
+  goal: "claude-opus-5",
+  build: "claude-sonnet-5",
+  audit: "claude-opus-5",
+};
+
+export const MODELS = {
+  goal: process.env.AGENTIC_LOOP_GOAL_MODEL || DEFAULT_MODELS.goal,
+  build: process.env.AGENTIC_LOOP_BUILD_MODEL || DEFAULT_MODELS.build,
+  audit: process.env.AGENTIC_LOOP_AUDIT_MODEL || DEFAULT_MODELS.audit,
+};
+
+function modelFor(role) {
+  const model = MODELS[role];
+  if (!model) throw new Error(`No model configured for agent role "${role}"`);
+  return model;
+}
+
 const MAX_TOKENS = 32000;
 const MAX_ITERATIONS = 3;
 const LOG_DIR = "./logs";
@@ -96,6 +117,7 @@ function logPhase(sessionFile, session, phase, agentRole, input, output) {
   session.phases.push({
     phase,
     agentRole,
+    model: MODELS[agentRole] || null,
     timestamp: new Date().toISOString(),
     inputSummary: input.slice(0, 200) + (input.length > 200 ? "…" : ""),
     output,
@@ -138,12 +160,13 @@ function printAgentOutput(role, text) {
 
 const client = new Anthropic();
 
-async function callAgent(systemPrompt, userMessage) {
+async function callAgent(systemPrompt, userMessage, role) {
+  const model = modelFor(role);
   let lastErr;
   for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
     try {
       const response = await client.messages.create({
-        model: MODEL,
+        model,
         max_tokens: MAX_TOKENS,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
@@ -151,7 +174,8 @@ async function callAgent(systemPrompt, userMessage) {
 
       if (response.stop_reason === "max_tokens") {
         throw new Error(
-          `Model output was TRUNCATED (stop_reason: max_tokens) after ${MAX_TOKENS} tokens.\n` +
+          `Model output was TRUNCATED (stop_reason: max_tokens) after ${MAX_TOKENS} tokens ` +
+          `(role: ${role}, model: ${model}).\n` +
           "The agent's output is incomplete and must not be passed to the next phase.\n" +
           "Fix: split the task into smaller pieces, or raise MAX_TOKENS in the config."
         );
@@ -164,7 +188,7 @@ async function callAgent(systemPrompt, userMessage) {
       if (err.message && err.message.includes("TRUNCATED")) throw err;
       if (attempt < MAX_RETRY_ATTEMPTS) {
         const delay = Math.pow(2, attempt) * 1000; // 2 s, 4 s
-        console.error(`\n⚠️  API error (attempt ${attempt}/${MAX_RETRY_ATTEMPTS}): ${err.message}`);
+        console.error(`\n⚠️  API error [${role} → ${model}] (attempt ${attempt}/${MAX_RETRY_ATTEMPTS}): ${err.message}`);
         console.error(`   Retrying in ${delay / 1000}s…`);
         await new Promise((r) => setTimeout(r, delay));
       }
@@ -196,7 +220,7 @@ function readProjectContext() {
 // They MUST appear in English exactly as shown, on their own line, regardless of
 // the language the goal is written in. All other prose may follow the goal language.
 
-const GOAL_AGENT_SYSTEM = `You are the Goal Agent in an Agentic Loop orchestration system.
+export const GOAL_AGENT_SYSTEM = `You are the Goal Agent in an Agentic Loop orchestration system.
 
 Your responsibilities depend on the current phase:
 
@@ -222,7 +246,7 @@ PHASE 6 — Documentation:
 Always respond in the same language as the goal provided, EXCEPT for machine-parsed tokens
 (VERDICT, PASS, FAIL, ESCALATE, BLOCKER) which MUST always be in English.`;
 
-const BUILD_AGENT_SYSTEM = `You are the Build Agent in an Agentic Loop orchestration system.
+export const BUILD_AGENT_SYSTEM = `You are the Build Agent in an Agentic Loop orchestration system.
 
 CRITICAL RULES:
 - You work ONLY from the instruction set provided. Do not re-interpret the goal.
@@ -242,7 +266,7 @@ Your output format:
 You have NO knowledge of any previous build attempts or auditor feedback unless it is explicitly
 included in your input under "AUDIT FAILURES FROM PREVIOUS ITERATION".`;
 
-const AUDIT_AGENT_SYSTEM = `You are the Audit Agent in an Agentic Loop orchestration system.
+export const AUDIT_AGENT_SYSTEM = `You are the Audit Agent in an Agentic Loop orchestration system.
 
 You receive two things: (1) the original instruction set (the contract), and (2) the builder's output.
 You have NO knowledge of the builder's reasoning, workarounds, or internal process.
@@ -279,6 +303,38 @@ If ESCALATE:
 
 Be precise and terse. No praise, no filler.`;
 
+// Sent only when an audit's verdict token could not be read. The audit itself may be
+// perfectly sound — it is the one machine-parsed line that failed — so ask for that
+// line alone rather than throwing the audit away.
+const VERDICT_REASK_SYSTEM = `You previously produced an audit, but its verdict line could not be parsed.
+
+Read the audit output you are given and reply with NOTHING BUT the verdict line it expresses,
+in exactly this form, as the entire response:
+
+VERDICT: PASS
+or
+VERDICT: FAIL
+or
+VERDICT: ESCALATE
+
+No markdown, no explanation, no other text. Do not re-audit — only restate the verdict already
+present in the output. If the output expresses no verdict at all, answer VERDICT: ESCALATE.`;
+
+/**
+ * Resolve an audit's verdict, re-asking once if the token cannot be read.
+ *
+ * Returns { verdict, reaskOutput }: verdict is null only when the token is still
+ * unreadable after the re-ask. `ask` is injected (callAgent in production) so this
+ * is testable without an API key.
+ */
+export async function resolveVerdict(auditText, ask) {
+  const direct = parseVerdict(auditText);
+  if (direct) return { verdict: direct, reaskOutput: null };
+
+  const reaskOutput = await ask(VERDICT_REASK_SYSTEM, `AUDIT OUTPUT:\n${auditText}`);
+  return { verdict: parseVerdict(reaskOutput), reaskOutput };
+}
+
 // ─── Human approval gate ─────────────────────────────────────────────────────
 
 async function waitForApproval(prompt, autoApprove) {
@@ -302,16 +358,6 @@ async function waitForApproval(prompt, autoApprove) {
   });
 }
 
-// ─── Verdict parsing ────────────────────────────────────────────────────────
-
-// Anchored to line-start; case-sensitive — tokens must be uppercase English as instructed
-const VERDICT_RE = /^[ \t]*VERDICT:\s*(PASS|FAIL|ESCALATE)\s*$/m;
-
-function parseVerdict(text) {
-  const m = text.match(VERDICT_RE);
-  return m ? m[1] : null;
-}
-
 // ─── Convergence detection ───────────────────────────────────────────────────
 
 function hashOutput(text) {
@@ -326,7 +372,7 @@ async function runLoop(goal, opts) {
   console.log(`\n🚀 Agentic Loop iniciado`);
   console.log(`   Goal: ${goal}`);
   if (opts.project) console.log(`   Proyecto: ${opts.project}`);
-  console.log(`   Modelo: ${MODEL}`);
+  console.log(`   Modelos: goal=${MODELS.goal}  build=${MODELS.build}  audit=${MODELS.audit}`);
   console.log(`   Log: ${sessionFile}`);
 
   const projectContext = readProjectContext();
@@ -339,7 +385,8 @@ async function runLoop(goal, opts) {
 
   const phase1Output = await callAgent(
     GOAL_AGENT_SYSTEM,
-    `PHASE: 1\nGOAL: ${goal}${projectContext}`
+    `PHASE: 1\nGOAL: ${goal}${projectContext}`,
+    "goal"
   );
 
   printAgentOutput("goal", phase1Output);
@@ -360,7 +407,8 @@ async function runLoop(goal, opts) {
 
   const phase2Output = await callAgent(
     GOAL_AGENT_SYSTEM,
-    `PHASE: 2\nGOAL: ${goal}\n\nPhase 1 outcome description (approved by user):\n${phase1Output}`
+    `PHASE: 2\nGOAL: ${goal}\n\nPhase 1 outcome description (approved by user):\n${phase1Output}`,
+    "goal"
   );
 
   printAgentOutput("goal", phase2Output);
@@ -397,7 +445,7 @@ async function runLoop(goal, opts) {
       ? `APPROVED OUTCOME (Phase 1, approved by user):\n${phase1Output}\n\nINSTRUCTION SET:\n${instructionSet}`
       : `INSTRUCTION SET:\n${instructionSet}\n\nAUDIT FAILURES FROM PREVIOUS ITERATION (fix only these):\n${auditVerdict}`;
 
-    builderOutput = await callAgent(BUILD_AGENT_SYSTEM, buildInput);
+    builderOutput = await callAgent(BUILD_AGENT_SYSTEM, buildInput, "build");
 
     printAgentOutput("build", builderOutput);
     logPhase(sessionFile, session, isFirstBuild ? 3 : 5, "build", buildInput, builderOutput);
@@ -412,7 +460,7 @@ async function runLoop(goal, opts) {
     lastBuildHash = currentHash;
 
     // BLOCKER must be on its own line to avoid false positives from comments
-    if (/^BLOCKER:/im.test(builderOutput)) {
+    if (hasBlocker(builderOutput)) {
       console.log("\n⚠️  El builder reportó un BLOCKER. Revisar output arriba.");
       finalizeSession(sessionFile, session, "blocked");
       return;
@@ -426,7 +474,7 @@ async function runLoop(goal, opts) {
       `${"─".repeat(40)}\n\n` +
       `BUILDER OUTPUT:\n${builderOutput}`;
 
-    auditVerdict = await callAgent(AUDIT_AGENT_SYSTEM, auditInput);
+    auditVerdict = await callAgent(AUDIT_AGENT_SYSTEM, auditInput, "audit");
 
     printAgentOutput("audit", auditVerdict);
     logPhase(sessionFile, session, isFirstBuild ? 4 : 5, "audit", auditInput, auditVerdict);
@@ -435,7 +483,22 @@ async function runLoop(goal, opts) {
     safeWriteSession(sessionFile, session);
 
     // Anchored regex parse — prevents substring collisions in prose
-    const verdict = parseVerdict(auditVerdict);
+    let verdict = parseVerdict(auditVerdict);
+
+    // An unreadable verdict is a formatting failure, not an audit failure. Ask the
+    // auditor for the token alone before doing anything with the build: synthesizing
+    // a FAIL here would throw away a build that may well have passed.
+    if (!verdict) {
+      console.error(
+        `\n⚠️  El audit no emitió un VERDICT reconocido (PASS / FAIL / ESCALATE).\n` +
+        `   Primeros 300 chars del output:\n   ${auditVerdict.slice(0, 300)}\n` +
+        `   Re-preguntando solo por el token…`
+      );
+      const recovery = await resolveVerdict(auditVerdict, (sys, msg) => callAgent(sys, msg, "audit"));
+      logPhase(sessionFile, session, isFirstBuild ? 4 : 5, "audit", "verdict re-ask", recovery.reaskOutput);
+      verdict = recovery.verdict;
+      if (verdict) console.log(`   ✔ Verdict recuperado: ${verdict}`);
+    }
 
     if (verdict === "PASS") {
       console.log("\n✅ Audit: PASS");
@@ -452,18 +515,16 @@ async function runLoop(goal, opts) {
         break;
       }
     } else {
-      // Unrecognized verdict — hard failure, NOT a silent success
+      // Still unreadable after the re-ask — escalate. Never guess a verdict: treating
+      // this as FAIL burns an iteration on a build that may have passed, and treating
+      // it as PASS would ship an unaudited build.
       console.error(
-        `\n💥 El audit no emitió un VERDICT reconocido (PASS / FAIL / ESCALATE).\n` +
-        `   Primeros 300 chars del output:\n   ${auditVerdict.slice(0, 300)}\n`
+        `\n🔺 El verdict del audit sigue sin poder leerse después de re-preguntar.\n` +
+        `   El builder output y el audit completo están en el session log.\n` +
+        `   Decisión de usuario: leer el audit y determinar el verdict a mano.`
       );
-      if (iterationCount === MAX_ITERATIONS) {
-        stuckReport = buildStuckReport(goal, session, "unrecognized-verdict");
-        break;
-      }
-      // Non-final iteration: treat as FAIL and continue
-      console.log(`   Tratando como FAIL y continuando (iteración ${iterationCount}/${MAX_ITERATIONS})`);
-      auditVerdict = `VERDICT: FAIL\n\nThe auditor did not emit a recognized verdict. Retry the build based on the original instruction set.`;
+      finalizeSession(sessionFile, session, "unparseable_verdict");
+      return;
     }
   }
 
@@ -490,7 +551,8 @@ async function runLoop(goal, opts) {
 
   const phase6Output = await callAgent(
     GOAL_AGENT_SYSTEM,
-    `PHASE: 6\n${phase6Input}`
+    `PHASE: 6\n${phase6Input}`,
+    "goal"
   );
 
   printAgentOutput("goal", phase6Output);
@@ -532,20 +594,34 @@ function buildStuckReport(goal, session, reason) {
 
 // ─── Entry point ────────────────────────────────────────────────────────────
 
-validateEnv();
+// Only run the loop when invoked directly — importing this module (e.g. from
+// scripts/check-verdict-format.mjs) must not start a session.
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
-const args = parseArgs(process.argv.slice(2));
-if (!args.goal) {
-  console.error(
-    "Usage: node orchestrator.js [--project <name>] [--yes] <goal description>\n\n" +
-    "  --project <name>   Separate logs under logs/<name>/\n" +
-    "  --yes / -y         Auto-approve Phase-1 and Phase-2 gates (CI / scripted use)\n" +
-    "                     Also triggered by including 'just do it' in the goal text\n"
-  );
-  process.exit(1);
+if (isMain) {
+  main();
 }
 
-runLoop(args.goal, args).catch((err) => {
-  console.error("\n💥 Error fatal:", err.message);
-  process.exit(1);
-});
+function main() {
+  validateEnv();
+
+  const args = parseArgs(process.argv.slice(2));
+  if (!args.goal) {
+    console.error(
+      "Usage: node orchestrator.js [--project <name>] [--yes] <goal description>\n\n" +
+      "  --project <name>   Separate logs under logs/<name>/\n" +
+      "  --yes / -y         Auto-approve Phase-1 and Phase-2 gates (CI / scripted use)\n" +
+      "                     Also triggered by including 'just do it' in the goal text\n\n" +
+      "Per-role models (env overrides, defaults in parentheses):\n" +
+      `  AGENTIC_LOOP_GOAL_MODEL    Phases 1, 2, 6 (${DEFAULT_MODELS.goal})\n` +
+      `  AGENTIC_LOOP_BUILD_MODEL   Phase 3 / build iterations (${DEFAULT_MODELS.build})\n` +
+      `  AGENTIC_LOOP_AUDIT_MODEL   Phase 4 / audit iterations (${DEFAULT_MODELS.audit})\n`
+    );
+    process.exit(1);
+  }
+
+  runLoop(args.goal, args).catch((err) => {
+    console.error("\n💥 Error fatal:", err.message);
+    process.exit(1);
+  });
+}

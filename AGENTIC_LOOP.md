@@ -135,7 +135,7 @@ VERDICT: PASS | FAIL | ESCALATE
 ## Stuck Report
 
 **Goal:** [goal original]
-**Reason:** [max-iterations | identical-output | unrecognized-verdict]
+**Reason:** [max-iterations | identical-output]
 
 **Iteración 1:** [qué se construyó] → [en qué falló el audit]
 **Iteración 2:** [qué se cambió] → [en qué falló el audit]
@@ -194,10 +194,43 @@ Los logs se guardan en `./logs/` localmente y no se suben a GitHub.
 
 ---
 
+## Modelos por rol
+
+Cada rol del loop corre con su propio modelo. Los roles de razonamiento —
+escribir el contrato y juzgar el audit — usan el modelo más fuerte; emitir
+archivos completos no lo necesita.
+
+| Rol | Fases | Default | Override |
+|---|---|---|---|
+| Goal Agent | 1, 2, 6 | `claude-opus-5` | `AGENTIC_LOOP_GOAL_MODEL` |
+| Build Agent | 3 y builds de Fase 5 | `claude-sonnet-5` | `AGENTIC_LOOP_BUILD_MODEL` |
+| Audit Agent | 4 y audits de Fase 5 | `claude-opus-5` | `AGENTIC_LOOP_AUDIT_MODEL` |
+
+```bash
+# Correr todo el loop en un solo modelo
+AGENTIC_LOOP_GOAL_MODEL=claude-sonnet-4-6 \
+AGENTIC_LOOP_AUDIT_MODEL=claude-sonnet-4-6 \
+  node orchestrator.js "descripción del goal"
+```
+
+El banner de arranque imprime los tres modelos, y cada entrada del session log
+guarda el modelo que efectivamente corrió esa fase.
+
+**Antes de cambiar el modelo de un rol**, correr el check de formato de verdict
+contra el modelo nuevo — el parsing de `VERDICT:` / `BLOCKER:` depende del
+comportamiento del modelo:
+
+```bash
+npm test                                    # parser offline (no necesita API key)
+ANTHROPIC_API_KEY=sk-ant-... npm run check-verdict   # llamada real a cada modelo configurado
+```
+
+---
+
 ## Tokens de control (siempre en inglés)
 
 El orchestrator parsea estos strings de forma programática — deben aparecer exactamente así,
-en inglés, en su propia línea, sin markdown alrededor:
+en inglés, en su propia línea:
 
 | Token | Quién lo emite | Efecto |
 |-------|---------------|--------|
@@ -207,6 +240,29 @@ en inglés, en su propia línea, sin markdown alrededor:
 | `BLOCKER: [desc]` | Build Agent | Loop se detiene, requiere decisión del usuario |
 
 Si el Goal Agent responde en español, estos tokens igual deben estar en inglés.
+
+El requisito duro es que **el token ocupe su propia línea**. Dentro de eso el parser
+es deliberadamente tolerante: markdown (`**VERDICT: PASS**`, `## VERDICT: FAIL`),
+indentación, mayúsculas/minúsculas (`Verdict: pass`) y puntuación final
+(`VERDICT: PASS.`) son deriva de formato, no desacuerdo.
+
+Lo que sigue rechazando: el token traducido (`VEREDICTO:`), un valor que no sea
+PASS/FAIL/ESCALATE, y el token embebido en medio de una línea de prosa — si el
+auditor menciona `VERDICT: PASS` razonando, no debe disparar el parser.
+
+Los casos exactos están en `test/verdict.test.mjs`.
+
+### Si el verdict igual no se puede leer
+
+El orchestrator **nunca adivina un verdict**. Cuando el token no parsea, re-pregunta
+una sola vez al Audit Agent por la línea sola (`VERDICT_REASK_SYSTEM`), pasándole su
+propio output. Si el re-ask tampoco parsea, el loop termina con outcome
+`unparseable_verdict` y se lo pasa al usuario.
+
+Esto importa porque el fallback anterior era sintetizar un `VERDICT: FAIL`: un build
+que había pasado se descartaba y se quemaba una iteración, con el run pareciendo un
+fallo normal. Un modelo que simplemente pone su verdict en negrita degradaba el loop
+de forma invisible.
 
 ---
 

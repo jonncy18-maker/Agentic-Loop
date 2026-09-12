@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node orchestrator.js"
+    "start": "node orchestrator.js",
+    "test": "node --test test/*.test.mjs",
+    "check-verdict": "node scripts/check-verdict-format.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0"
