@@ -194,10 +194,43 @@ Los logs se guardan en `./logs/` localmente y no se suben a GitHub.
 
 ---
 
+## Modelos por rol
+
+Cada rol del loop corre con su propio modelo. Los roles de razonamiento —
+escribir el contrato y juzgar el audit — usan el modelo más fuerte; emitir
+archivos completos no lo necesita.
+
+| Rol | Fases | Default | Override |
+|---|---|---|---|
+| Goal Agent | 1, 2, 6 | `claude-opus-5` | `AGENTIC_LOOP_GOAL_MODEL` |
+| Build Agent | 3 y builds de Fase 5 | `claude-sonnet-4-6` | `AGENTIC_LOOP_BUILD_MODEL` |
+| Audit Agent | 4 y audits de Fase 5 | `claude-opus-5` | `AGENTIC_LOOP_AUDIT_MODEL` |
+
+```bash
+# Correr todo el loop en un solo modelo
+AGENTIC_LOOP_GOAL_MODEL=claude-sonnet-4-6 \
+AGENTIC_LOOP_AUDIT_MODEL=claude-sonnet-4-6 \
+  node orchestrator.js "descripción del goal"
+```
+
+El banner de arranque imprime los tres modelos, y cada entrada del session log
+guarda el modelo que efectivamente corrió esa fase.
+
+**Antes de cambiar el modelo de un rol**, correr el check de formato de verdict
+contra el modelo nuevo — el parsing de `VERDICT:` / `BLOCKER:` depende del
+comportamiento del modelo:
+
+```bash
+npm test                                    # parser offline (no necesita API key)
+ANTHROPIC_API_KEY=sk-ant-... npm run check-verdict   # llamada real a cada modelo configurado
+```
+
+---
+
 ## Tokens de control (siempre en inglés)
 
 El orchestrator parsea estos strings de forma programática — deben aparecer exactamente así,
-en inglés, en su propia línea, sin markdown alrededor:
+en inglés, en su propia línea:
 
 | Token | Quién lo emite | Efecto |
 |-------|---------------|--------|
@@ -207,6 +240,11 @@ en inglés, en su propia línea, sin markdown alrededor:
 | `BLOCKER: [desc]` | Build Agent | Loop se detiene, requiere decisión del usuario |
 
 Si el Goal Agent responde en español, estos tokens igual deben estar en inglés.
+
+El parser tolera que el modelo envuelva la línea en markdown (`**VERDICT: PASS**`,
+`## VERDICT: FAIL`): cumplir en sustancia y perder una iteración por formato sería
+un desperdicio. Lo que no tolera es el token en minúscula, traducido, o embebido en
+medio de una línea de prosa. Los casos exactos están en `test/verdict.test.mjs`.
 
 ---
 

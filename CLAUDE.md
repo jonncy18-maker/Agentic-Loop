@@ -5,6 +5,9 @@ Este repo es una herramienta personal reutilizable. No es un proyecto de product
 ## Qué hace este repo
 
 - `orchestrator.js` — script Node.js que ejecuta el Agentic Loop de 6 fases llamando la API de Anthropic directamente
+- `verdict.js` — parsing de los tokens `VERDICT:` / `BLOCKER:` (separado para poder testearlo sin arrancar el loop)
+- `test/` — tests del parser, corren con `npm test`, sin API key
+- `scripts/check-verdict-format.mjs` — check en vivo: le manda un audit real a cada modelo configurado y verifica que el verdict sea parseable
 - `AGENTIC_LOOP.md` — protocolo completo del loop, referenciado desde el CLAUDE.md de cada proyecto
 - `CODER_PROFILE.md` — perfil de coding: estándar de verificación y convenciones que aplican a toda tarea, sin umbral. Se carga siempre; el loop se activa solo sobre el umbral
 - `package.json` — dependencia única: `@anthropic-ai/sdk`
@@ -13,7 +16,7 @@ Este repo es una herramienta personal reutilizable. No es un proyecto de product
 ## Stack
 
 - Node.js + ES modules
-- Anthropic API (`claude-sonnet-4-6`)
+- Anthropic API — modelo por rol: Goal y Audit en `claude-opus-5`, Build en `claude-sonnet-4-6` (override con `AGENTIC_LOOP_{GOAL,BUILD,AUDIT}_MODEL`)
 - Sin framework, sin dependencias extra
 
 ## Reglas para modificar este repo
@@ -39,7 +42,7 @@ El Goal Agent va a pedir aprobación en Fase 1 y Fase 2 antes de tocar nada.
 - No convertir esto en un framework general — debe seguir siendo simple y opinionado
 - No agregar UI, servidor, ni dependencias pesadas
 - No subir logs a GitHub
-- No cambiar el modelo hardcodeado (`MODEL` en orchestrator.js) sin testear el output del nuevo modelo — el parsing de VERDICT/BLOCKER depende del comportamiento del modelo actual
+- No cambiar el modelo de un rol (`DEFAULT_MODELS` en orchestrator.js) sin correr `npm test` y `npm run check-verdict` contra el modelo nuevo — el parsing de VERDICT/BLOCKER depende del comportamiento del modelo
 
 ## Contexto de diseño
 
