@@ -6,21 +6,29 @@
  * machine-parsed part of any agent output — when a role's model changes, this is
  * the contract that has to keep holding. See test/verdict.test.mjs.
  *
- * The verdict line stays line-anchored, uppercase and English (the audit system
- * prompt demands exactly that), but markdown emphasis and heading wrappers are
- * tolerated: a model that writes `**VERDICT: PASS**` has complied in substance,
- * and rejecting it would burn an iteration on formatting.
+ * The token must still OWN ITS LINE: a line-anchored match is what keeps an
+ * auditor that discusses "VERDICT: PASS" mid-sentence from tripping the parser.
+ * Within that constraint the match is deliberately forgiving — markdown emphasis,
+ * heading markers, indentation, case, and trailing punctuation are all formatting
+ * drift, not disagreement. A model that complies in substance must never cost an
+ * iteration, because an unparseable verdict is expensive: a build that passed
+ * gets thrown away.
  */
 
-export const VERDICT_RE =
-  /^[ \t]*#{0,6}[ \t]*(?:\*\*|__)?[ \t]*VERDICT:[ \t]*(PASS|FAIL|ESCALATE)[ \t]*(?:\*\*|__)?[ \t]*$/m;
+// Shared shape: [indent] [#…] [** or __] TOKEN: VALUE [** or __] [. or :]
+const WRAP_OPEN = String.raw`[ \t]*#{0,6}[ \t]*(?:\*\*|__)?[ \t]*`;
+const WRAP_CLOSE = String.raw`[ \t]*(?:\*\*|__)?[ \t]*[.:]?[ \t]*`;
 
-// BLOCKER must open its own line to avoid false positives from prose or code comments
-export const BLOCKER_RE = /^[ \t]*(?:\*\*|__)?BLOCKER:/im;
+export const VERDICT_RE = new RegExp(
+  `^${WRAP_OPEN}VERDICT:${WRAP_CLOSE}?[ \\t]*(PASS|FAIL|ESCALATE)${WRAP_CLOSE}$`,
+  "im"
+);
+
+export const BLOCKER_RE = new RegExp(`^${WRAP_OPEN}BLOCKER[:\\*_]`, "im");
 
 export function parseVerdict(text) {
   const m = text.match(VERDICT_RE);
-  return m ? m[1] : null;
+  return m ? m[1].toUpperCase() : null;
 }
 
 export function hasBlocker(text) {

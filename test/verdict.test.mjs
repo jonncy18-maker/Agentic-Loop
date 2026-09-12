@@ -24,6 +24,23 @@ test("tolerates markdown emphasis and heading wrappers", () => {
   assert.equal(parseVerdict("__VERDICT: FAIL__"), "FAIL");
   assert.equal(parseVerdict("## VERDICT: ESCALATE"), "ESCALATE");
   assert.equal(parseVerdict("### **VERDICT: PASS**"), "PASS");
+  assert.equal(parseVerdict("**VERDICT:** FAIL"), "FAIL");
+});
+
+test("tolerates a fenced code block", () => {
+  assert.equal(parseVerdict("```\nVERDICT: PASS\n```"), "PASS");
+});
+
+test("tolerates trailing punctuation", () => {
+  assert.equal(parseVerdict("VERDICT: PASS."), "PASS");
+  assert.equal(parseVerdict("VERDICT: ESCALATE:"), "ESCALATE");
+  assert.equal(parseVerdict("**VERDICT: FAIL**."), "FAIL");
+});
+
+test("tolerates case drift on the token, normalizing the result", () => {
+  assert.equal(parseVerdict("Verdict: PASS"), "PASS");
+  assert.equal(parseVerdict("verdict: pass"), "PASS");
+  assert.equal(parseVerdict("Verdict: Fail"), "FAIL");
 });
 
 test("takes the first verdict when the body quotes others", () => {
@@ -37,11 +54,11 @@ test("rejects a verdict embedded mid-line in prose", () => {
   assert.equal(parseVerdict("The contract says to emit VERDICT: FAIL when it does not match."), null);
 });
 
-test("rejects lowercase, translated, or unknown verdict values", () => {
-  assert.equal(parseVerdict("verdict: pass"), null);
+test("rejects translated or unknown verdict values", () => {
   assert.equal(parseVerdict("VEREDICTO: PASS"), null);
   assert.equal(parseVerdict("VERDICT: APPROVED"), null);
   assert.equal(parseVerdict("VERDICT: PARTIAL PASS"), null);
+  assert.equal(parseVerdict("VERDICT: PASS and FAIL"), null);
 });
 
 test("rejects output with no verdict at all", () => {
@@ -53,6 +70,8 @@ test("rejects output with no verdict at all", () => {
 test("detects a blocker on its own line, with or without emphasis", () => {
   assert.ok(hasBlocker("=== FILE: a.js ===\n...\n=== END FILE ===\n\nBLOCKER: schema unknown"));
   assert.ok(hasBlocker("**BLOCKER:** which table stores sessions?"));
+  assert.ok(hasBlocker("  BLOCKER: indented still counts"));
+  assert.ok(hasBlocker("## BLOCKER: as a heading"));
   assert.ok(hasBlocker("  blocker: lowercase still counts"));
 });
 

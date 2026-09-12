@@ -30,7 +30,7 @@ import { parseVerdict, hasBlocker } from "./verdict.js";
 // stronger model; bulk file emission does not need it. Override any role via env var.
 const DEFAULT_MODELS = {
   goal: "claude-opus-5",
-  build: "claude-sonnet-4-6",
+  build: "claude-sonnet-5",
   audit: "claude-opus-5",
 };
 
@@ -303,6 +303,38 @@ If ESCALATE:
 
 Be precise and terse. No praise, no filler.`;
 
+// Sent only when an audit's verdict token could not be read. The audit itself may be
+// perfectly sound — it is the one machine-parsed line that failed — so ask for that
+// line alone rather than throwing the audit away.
+const VERDICT_REASK_SYSTEM = `You previously produced an audit, but its verdict line could not be parsed.
+
+Read the audit output you are given and reply with NOTHING BUT the verdict line it expresses,
+in exactly this form, as the entire response:
+
+VERDICT: PASS
+or
+VERDICT: FAIL
+or
+VERDICT: ESCALATE
+
+No markdown, no explanation, no other text. Do not re-audit — only restate the verdict already
+present in the output. If the output expresses no verdict at all, answer VERDICT: ESCALATE.`;
+
+/**
+ * Resolve an audit's verdict, re-asking once if the token cannot be read.
+ *
+ * Returns { verdict, reaskOutput }: verdict is null only when the token is still
+ * unreadable after the re-ask. `ask` is injected (callAgent in production) so this
+ * is testable without an API key.
+ */
+export async function resolveVerdict(auditText, ask) {
+  const direct = parseVerdict(auditText);
+  if (direct) return { verdict: direct, reaskOutput: null };
+
+  const reaskOutput = await ask(VERDICT_REASK_SYSTEM, `AUDIT OUTPUT:\n${auditText}`);
+  return { verdict: parseVerdict(reaskOutput), reaskOutput };
+}
+
 // ─── Human approval gate ─────────────────────────────────────────────────────
 
 async function waitForApproval(prompt, autoApprove) {
@@ -451,7 +483,22 @@ async function runLoop(goal, opts) {
     safeWriteSession(sessionFile, session);
 
     // Anchored regex parse — prevents substring collisions in prose
-    const verdict = parseVerdict(auditVerdict);
+    let verdict = parseVerdict(auditVerdict);
+
+    // An unreadable verdict is a formatting failure, not an audit failure. Ask the
+    // auditor for the token alone before doing anything with the build: synthesizing
+    // a FAIL here would throw away a build that may well have passed.
+    if (!verdict) {
+      console.error(
+        `\n⚠️  El audit no emitió un VERDICT reconocido (PASS / FAIL / ESCALATE).\n` +
+        `   Primeros 300 chars del output:\n   ${auditVerdict.slice(0, 300)}\n` +
+        `   Re-preguntando solo por el token…`
+      );
+      const recovery = await resolveVerdict(auditVerdict, (sys, msg) => callAgent(sys, msg, "audit"));
+      logPhase(sessionFile, session, isFirstBuild ? 4 : 5, "audit", "verdict re-ask", recovery.reaskOutput);
+      verdict = recovery.verdict;
+      if (verdict) console.log(`   ✔ Verdict recuperado: ${verdict}`);
+    }
 
     if (verdict === "PASS") {
       console.log("\n✅ Audit: PASS");
@@ -468,18 +515,16 @@ async function runLoop(goal, opts) {
         break;
       }
     } else {
-      // Unrecognized verdict — hard failure, NOT a silent success
+      // Still unreadable after the re-ask — escalate. Never guess a verdict: treating
+      // this as FAIL burns an iteration on a build that may have passed, and treating
+      // it as PASS would ship an unaudited build.
       console.error(
-        `\n💥 El audit no emitió un VERDICT reconocido (PASS / FAIL / ESCALATE).\n` +
-        `   Primeros 300 chars del output:\n   ${auditVerdict.slice(0, 300)}\n`
+        `\n🔺 El verdict del audit sigue sin poder leerse después de re-preguntar.\n` +
+        `   El builder output y el audit completo están en el session log.\n` +
+        `   Decisión de usuario: leer el audit y determinar el verdict a mano.`
       );
-      if (iterationCount === MAX_ITERATIONS) {
-        stuckReport = buildStuckReport(goal, session, "unrecognized-verdict");
-        break;
-      }
-      // Non-final iteration: treat as FAIL and continue
-      console.log(`   Tratando como FAIL y continuando (iteración ${iterationCount}/${MAX_ITERATIONS})`);
-      auditVerdict = `VERDICT: FAIL\n\nThe auditor did not emit a recognized verdict. Retry the build based on the original instruction set.`;
+      finalizeSession(sessionFile, session, "unparseable_verdict");
+      return;
     }
   }
 

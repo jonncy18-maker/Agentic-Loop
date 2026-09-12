@@ -135,7 +135,7 @@ VERDICT: PASS | FAIL | ESCALATE
 ## Stuck Report
 
 **Goal:** [goal original]
-**Reason:** [max-iterations | identical-output | unrecognized-verdict]
+**Reason:** [max-iterations | identical-output]
 
 **Iteración 1:** [qué se construyó] → [en qué falló el audit]
 **Iteración 2:** [qué se cambió] → [en qué falló el audit]
@@ -203,7 +203,7 @@ archivos completos no lo necesita.
 | Rol | Fases | Default | Override |
 |---|---|---|---|
 | Goal Agent | 1, 2, 6 | `claude-opus-5` | `AGENTIC_LOOP_GOAL_MODEL` |
-| Build Agent | 3 y builds de Fase 5 | `claude-sonnet-4-6` | `AGENTIC_LOOP_BUILD_MODEL` |
+| Build Agent | 3 y builds de Fase 5 | `claude-sonnet-5` | `AGENTIC_LOOP_BUILD_MODEL` |
 | Audit Agent | 4 y audits de Fase 5 | `claude-opus-5` | `AGENTIC_LOOP_AUDIT_MODEL` |
 
 ```bash
@@ -241,10 +241,28 @@ en inglés, en su propia línea:
 
 Si el Goal Agent responde en español, estos tokens igual deben estar en inglés.
 
-El parser tolera que el modelo envuelva la línea en markdown (`**VERDICT: PASS**`,
-`## VERDICT: FAIL`): cumplir en sustancia y perder una iteración por formato sería
-un desperdicio. Lo que no tolera es el token en minúscula, traducido, o embebido en
-medio de una línea de prosa. Los casos exactos están en `test/verdict.test.mjs`.
+El requisito duro es que **el token ocupe su propia línea**. Dentro de eso el parser
+es deliberadamente tolerante: markdown (`**VERDICT: PASS**`, `## VERDICT: FAIL`),
+indentación, mayúsculas/minúsculas (`Verdict: pass`) y puntuación final
+(`VERDICT: PASS.`) son deriva de formato, no desacuerdo.
+
+Lo que sigue rechazando: el token traducido (`VEREDICTO:`), un valor que no sea
+PASS/FAIL/ESCALATE, y el token embebido en medio de una línea de prosa — si el
+auditor menciona `VERDICT: PASS` razonando, no debe disparar el parser.
+
+Los casos exactos están en `test/verdict.test.mjs`.
+
+### Si el verdict igual no se puede leer
+
+El orchestrator **nunca adivina un verdict**. Cuando el token no parsea, re-pregunta
+una sola vez al Audit Agent por la línea sola (`VERDICT_REASK_SYSTEM`), pasándole su
+propio output. Si el re-ask tampoco parsea, el loop termina con outcome
+`unparseable_verdict` y se lo pasa al usuario.
+
+Esto importa porque el fallback anterior era sintetizar un `VERDICT: FAIL`: un build
+que había pasado se descartaba y se quemaba una iteración, con el run pareciendo un
+fallo normal. Un modelo que simplemente pone su verdict en negrita degradaba el loop
+de forma invisible.
 
 ---
 

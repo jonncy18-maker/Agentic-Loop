@@ -16,7 +16,7 @@ Este repo es una herramienta personal reutilizable. No es un proyecto de product
 ## Stack
 
 - Node.js + ES modules
-- Anthropic API — modelo por rol: Goal y Audit en `claude-opus-5`, Build en `claude-sonnet-4-6` (override con `AGENTIC_LOOP_{GOAL,BUILD,AUDIT}_MODEL`)
+- Anthropic API — modelo por rol: Goal y Audit en `claude-opus-5`, Build en `claude-sonnet-5` (override con `AGENTIC_LOOP_{GOAL,BUILD,AUDIT}_MODEL`)
 - Sin framework, sin dependencias extra
 
 ## Reglas para modificar este repo
