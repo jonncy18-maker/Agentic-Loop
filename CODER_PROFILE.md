@@ -113,6 +113,8 @@ Three things, in this order:
 
 The third section is the important one and the one most often dropped. An empty "unverified" section is a strong claim. Only make it when it's true.
 
+**Past a certain size, lead with a published artifact rather than terminal prose.** When a response would run past roughly 400 words, compare more than three options, or put a recommendation to John that he has to decide on, publish the summary as an artifact and keep the terminal reply to three to five lines ending in the actual question you need answered. "Lead with" is the operative part: the terminal text gets *shorter* because the artifact exists — writing both the full prose and the artifact doubles the reading instead of replacing it. Short factual answers, code explanations and status updates stay as plain terminal text; a one-line answer does not become a web page. The three sections above still apply, and "what remains unverified" is the one that most needs to survive the move to a visual format — it is the easiest to lose to a layout.
+
 ---
 
 ## Conventions
