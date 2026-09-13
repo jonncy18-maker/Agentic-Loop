@@ -72,6 +72,37 @@ Para todo lo demás — typo, one-liner, config de un archivo — ejecutar direc
 
 ---
 
+## Cómo se le presentan las fases al humano
+
+**Las dos aprobaciones y el cierre del run se presentan como artifact visual, no como texto en
+la terminal.** Lo que el humano tiene que aprobar o juzgar es exactamente lo que peor se lee
+como pared de texto: un outcome, un contrato de seis secciones con criterios numerados, un
+audit con fallas punto por punto.
+
+Quién lo publica: **Claude Code, no el orchestrator.** `orchestrator.js` llama la API y escribe
+texto a stdout — no tiene acceso a artifacts y no debería tenerlo. Cuando el loop corre dentro
+de una sesión de Claude Code, el modelo toma el output de la fase y lo publica; cuando corre
+solo desde la terminal, el texto en consola sigue siendo la única salida y el loop funciona
+igual. La regla es sobre la presentación, no sobre el protocolo.
+
+| Fase | Qué recibe el humano |
+|---|---|
+| 1 — Outcome | **Artifact** — es lo que se aprueba |
+| 2 — Contrato | **Artifact** — criterios numerados, restricciones, archivos |
+| 3 — Build | Texto / archivos. Es materia prima para aplicar, no para leer |
+| 4–5 — Audit e iteraciones | Nada por iteración. Se acumulan para el cierre |
+| Cierre (PASS, ESCALATE o Stuck Report) | **Artifact** — veredicto, iteraciones, qué quedó sin verificar |
+
+**Máximo tres artifacts por run.** Uno por gate y uno de cierre. Un artifact por iteración es
+la misma pared de texto con clicks de más.
+
+**El mensaje que acompaña al artifact no es un link solo.** Un artifact es fácil de saltear, así
+que lo que cambia una decisión — qué quedó sin verificar, qué está bloqueado, qué se necesita
+del usuario — se dice también en el mensaje. Especialmente en los gates: la pregunta que se
+está haciendo va en el texto, no solo adentro de la página.
+
+---
+
 ## Las 6 fases
 
 ### Fase 1 — Entender & Verificar `[Goal Agent]`
@@ -79,6 +110,7 @@ Para todo lo demás — typo, one-liner, config de un archivo — ejecutar direc
 - Si el proyecto tiene `ARCHITECTURE.md` y/o `ROADMAP.md`, el orchestrator los inyecta en el contexto del Goal Agent automáticamente.
 - Producir un visual o descripción de qué cambia desde la perspectiva del usuario — qué verá y experimentará después del trabajo (outcome-focused, no implementation-focused)
 - Sin listas de archivos, sin diffs
+- **Presentar como artifact** cuando el loop corre dentro de Claude Code, con la pregunta de aprobación en el mensaje
 - **Siempre pausar para aprobación explícita antes de continuar**
 - Excepción: si el usuario dice "just do it" en el mismo mensaje, o usa el flag `--yes`, saltar automáticamente a Fase 2
 
@@ -93,7 +125,7 @@ Producir un instruction set que funciona como contrato entre builder y auditor:
 5. Criterios de éxito numerados que el audit agent verificará
 6. Restricciones explícitas — qué NO hacer
 
-**El usuario aprueba este contrato antes de que el builder lo reciba.** Es el artefacto más importante del loop.
+**El usuario aprueba este contrato antes de que el builder lo reciba.** Es el artefacto más importante del loop — y el que más gana con presentarse como artifact: seis secciones numeradas leídas como párrafos son el mismo contenido sin la estructura que lo hace revisable.
 
 ### Fase 3 — Build `[Build Agent — contexto aislado]`
 
@@ -152,6 +184,7 @@ Después de un audit satisfactorio:
 - **`ROADMAP.md`** — agregar entrada de sesión: qué se construyó, cuántas iteraciones, qué encontró el audit
 - **`ARCHITECTURE.md`** — actualizar solo si hubo un cambio estructural o de modelo de datos
 - El output de Fase 6 se imprime en consola para copy-paste — el usuario lo aplica a los archivos reales
+- El **artifact de cierre** va acá: veredicto final, cuántas iteraciones, qué encontró el audit, qué quedó sin verificar. Un solo artifact para todo el run, no uno por fase
 
 ---
 
