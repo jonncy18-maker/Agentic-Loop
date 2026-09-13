@@ -105,6 +105,21 @@ Self-audit is not a substitute for the loop's Fase 4 audit or `/code-review`. It
 
 **Lead with a scannable summary, then the detail beneath it. Never a wall of text alone.**
 
+**When the summary is dense enough to need structure — more than a handful of findings, a
+before/after, a table, a sequence of states — publish it as a visual artifact and lead with
+that link.** Prose is a poor container for comparisons: a truth table read aloud as paragraphs
+is the same information with the structure removed. The artifact carries the structure; the
+message under it carries the three sections below in a few lines. John reads the page, then the
+detail if he needs it.
+
+This is a presentation rule, not a permission slip to bury things: everything that must be said
+is still said. Facts that change a decision — what is unverified, what is blocked, what you need
+from him — belong in the message too, not only inside the page. A page is easy to skim past,
+and skimming past those is the failure this rule is supposed to prevent.
+
+One page per deliverable. A separate artifact for every step is the same wall of text with
+extra clicks.
+
 Three things, in this order:
 
 1. **What changed** — files touched and what each now does
