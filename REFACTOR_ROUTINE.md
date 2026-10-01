@@ -1,4 +1,4 @@
-# Refactor Routine — v0.1
+# Refactor Routine — v0.2
 
 _Personal / canonical. Run by a scheduled Claude Routine (fresh cloud session per firing) across John's repos._
 _Sibling of `CODER_PROFILE.md`, which applies in full. Edit this file to change the routine for every repo at once — the Routine's own prompt only points here._
@@ -6,6 +6,9 @@ _Sibling of `CODER_PROFILE.md`, which applies in full. Edit this file to change 
 ---
 
 ## The one rule
+
+Refactor PRs **auto-merge when CI passes — no human reads the diff.** That is why the allowed scope below is deliberately narrow: only changes whose safety a machine can establish (zero references + green build). Anything that would need a human's judgment is out of scope, not "careful".
+
 
 **A refactor PR must not change what the app does.** Same inputs, same outputs, same UI, same API responses, same database writes, same AI prompts. If you cannot show a change is behavior-preserving, it does not go in the PR. Skipping a candidate is always an acceptable outcome; shipping a behavior change is not.
 
@@ -31,14 +34,14 @@ To add a repo: add a row. Repos without a row are never touched.
 
 ## What counts as a refactor here
 
-Allowed, in order of preference:
+Only these three, nothing else:
 
-1. **Dead code removal** — unused files, exports, functions, imports, variables, commented-out code. Evidence required: `grep -rn` for the identifier across the repo (including `app/`, `pages/`, `scripts/`, MCP tool registries, and dynamic string references) returns nothing but the definition, and the build passes after removal. Run `npx -y knip --reporter compact` to find candidates; knip reports false positives for entry points it doesn't know (MCP servers, scripts, route files), so every candidate needs the grep check.
-2. **Mechanical lint fixes** — unused vars/imports, `no-useless-*`, `prefer-const`. NOT `react-hooks/*` fixes: those change render behavior.
-3. **De-duplication** — two or more byte-for-byte (or trivially) identical pure helpers collapsed into one existing location. Not "similar" code — identical code.
-4. **Local clarity** — renaming a local variable, flattening a nested conditional, or replacing a hand-rolled loop with an equivalent built-in, where equivalence is obvious on reading, including for null/undefined/empty inputs.
+1. **Dead code removal** — unused functions, exports, imports, variables, whole files nothing imports, and commented-out code blocks. Evidence required for every deletion: `grep -rn` for the identifier (or file's import path) across the whole repo returns nothing but the definition — check `app/`, `pages/`, `scripts/`, `lib/`, `src/`, MCP tool registries, and dynamic/string references (`import(`, `require(`, template strings, object-key lookups). Any non-definition hit → keep it. `npx -y knip --reporter compact` can suggest candidates but is never evidence on its own.
+   - **Never delete** framework entry points even if nothing imports them: anything under `app/` or `pages/` named `page`, `layout`, `route`, `loading`, `error`, `not-found`, `template`, `middleware`, plus `public/`, `scripts/`, `*.config.*`, service workers, and anything referenced from `package.json`, `vercel.json` or `next.config.*`.
+2. **Mechanical lint fixes** — only `no-unused-vars`/unused imports and `prefer-const`. Nothing else, and never `react-hooks/*` (those change render behavior).
+3. **Formatting** — run the repo's own Prettier config (only if the repo has one) on the day's candidate files, as its own commit. Formatting-only diffs don't count toward the line limit.
 
-Not allowed: changing function signatures that are exported and used elsewhere, reordering side effects, touching async/await or error-handling flow, changing default values, "while I'm here" fixes of bugs you notice. A bug you notice goes in the PR body under **Noticed, not changed** — never into the diff.
+Not allowed (even if it looks safe): merging duplicate code, renaming, restructuring conditionals or loops, removing `console.*` calls, changing defaults, signatures, async/error flow, or any "while I'm here" fix. A bug you notice goes in the PR body under **Noticed, not changed** — never into the diff.
 
 ---
 
@@ -52,7 +55,7 @@ Scope is limited to code changed recently, so old debt isn't re-litigated every 
 
 1. For each repo in the table: `git log origin/main --since="24 hours ago" --name-only --pretty=format: | sort -u` gives the candidate files. Drop files that no longer exist and anything in a never-touch area.
 2. No candidate files → skip the repo. No PR, no comment.
-3. If the repo already has an **open** PR whose branch starts with `claude/refactor-`, skip the repo (don't pile up unreviewed refactor PRs) and mention it in the final report.
+3. If the repo already has an **open** PR whose branch starts with `claude/refactor-` (an earlier one whose CI failed or is still pending), skip the repo and mention it in the final report.
 4. Otherwise look for allowed refactors **only inside the candidate files**. Nothing worth doing → skip. Do not manufacture a PR.
 
 ### Baseline mode
@@ -63,13 +66,13 @@ One-time whole-repo pass. Same rules, scope is the whole repo, minus never-touch
 
 ## Per-repo procedure
 
-1. Attach the repo with `add_repo` (access `push`), clone it, `npm ci`.
+1. The repos are pre-cloned under `/home/user` by the Routine. `cd` in and `npm ci`.
 2. Run the repo's checks on untouched `origin/main` and save the output. If they fail on `main`, stop for this repo — report it, open nothing. A refactor can't be verified against a red baseline.
 3. Create branch `claude/refactor-YYYY-MM-DD` from `origin/main`.
 4. Make the changes. Limits per PR: **at most ~250 changed lines and 10 files**. Over that, keep the safest subset.
 5. Re-run the same checks. All must pass. A failure you can't fix in 3 attempts → drop that change, not the check.
 6. Re-read the full diff adversarially: for each hunk, could any input now produce a different result? If yes or unsure, revert the hunk.
-7. Commit, push, open a **draft** PR against `main`. Never merge, never mark ready for review, never enable auto-merge.
+7. Commit, push, open a PR against `main` (**not** draft) titled `Refactor: <summary>`, then enable auto-merge with the squash method so GitHub merges it once required CI passes. Never merge it directly and never bypass CI. If auto-merge can't be enabled (repo setting off, no required check), leave the PR open and report it as "needs manual merge".
 
 ### PR body
 
@@ -84,7 +87,7 @@ Unverified: runtime behavior in the browser. No test suite covers <areas>; behav
 ## Noticed, not changed
 Bugs or risky code seen along the way, if any.
 
-Mode: daily | baseline
+Mode: daily | baseline · Auto-merge: enabled | needs manual merge
 ```
 
 ---
