@@ -3,7 +3,7 @@
 /**
  * Live check: does each configured model actually emit a parseable VERDICT line?
  *
- * CLAUDE.md requires testing verdict/blocker parsing before changing any model.
+ * AGENTS.md requires testing verdict/blocker parsing before changing any model.
  * This is that test. It sends the real audit system prompt to each configured
  * model with a contract the builder plainly violated, then runs the response
  * through the same parser the orchestrator uses.
