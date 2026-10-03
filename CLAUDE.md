@@ -27,6 +27,16 @@ Este repo es una herramienta personal reutilizable. No es un proyecto de product
 - **`package.json`** — no agregar dependencias sin razón fuerte. El objetivo es que el orchestrator sea liviano. Commitear `package-lock.json` para installs determinísticos.
 - **`logs/`** — nunca commitear. Está en `.gitignore`.
 
+## Selección de modelo para subagentes
+
+**Nombrar la familia, nunca la versión; elegir según qué tan verificable sea el resultado.** La sesión principal elige el modelo para cada tarea. Esto es un default, no una lista cerrada — al reportar, dice qué modelo usó y por qué.
+- **Haiku** — cualquier tarea con una especificación clara cuyo resultado se verifica: barridos de archivos o usos, resumir output, edits mecánicos, formateo, tests chicos, docs escritas contra una especificación, búsquedas en paralelo. Es el tier más chico, así que "simple" no alcanza: un trabajo trivial donde nada va a atrapar un error (un edit sensible a seguridad, mover texto literal entre muchos archivos) va a Sonnet.
+- **Sonnet** — el default ante la duda: construir features, rastrear bugs, refactors, trabajo de UI, reviews.
+- **Opus** — cuando un error sutil saldría caro o el problema es ambiguo, sin importar el tamaño: decisiones de arquitectura y alcance, auditorías donde lo que se escapa cuesta caro.
+- **Escalar, no parchar.** Si el resultado de un modelo más barato se ve flojo o falla un check, volver a correrlo un tier arriba en vez de confiar en él o arreglarlo a mano.
+
+Acá se escriben familias ("Sonnet", nunca "Sonnet 5.5"), para que la regla siga apuntando al tier vigente sin editarla. Esto define qué modelo usan los subagentes de Claude Code — no toca los IDs de modelo fijados en el código de aplicación (incluido el orchestrator), que siguen fijados a un ID exacto a propósito.
+
 ## Cómo correr el loop sobre sí mismo
 
 Si querés usar el loop para mejorar el loop:
