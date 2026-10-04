@@ -51,3 +51,13 @@ El Goal Agent va a pedir aprobación en Fase 1 y Fase 2 antes de tocar nada.
 El loop está basado en el protocolo del `CLAUDE.md` del proyecto `AI-Capital-Planning`. La decisión de diseño más importante es el **aislamiento de contexto entre builder y auditor**: el auditor recibe solo el contrato (Fase 2) + el output del builder — nunca el razonamiento interno del builder. Esto garantiza compliance real contra el contrato, no validación del proceso.
 
 El orchestrator **no escribe archivos al disco** — produce artefactos de texto que el usuario (o Claude Code) aplica. Ver `AGENTIC_LOOP.md` para el protocolo completo, incluyendo la estrategia de versioning con tags de git.
+
+## Working in an agent copy (Codex / Antigravity)
+
+Applies only when your working directory is under `~/code/_codex/` or `~/code/_antigravity/`. Those copies sync from the local `main` in `~/code/<repo>`, not from GitHub (local `main` is usually ahead, and the copies have no push access).
+
+At the start of each session, with the copy on a clean `main`:
+
+1. `git fetch local && git merge --ff-only local/main`.
+2. If the copy is not on a clean `main`, or the fast-forward fails, stop and tell John. Do not reset, rebase or discard anything on your own.
+3. Do your work on a local branch and hand it back through the audit inbox; never edit `main` in the copy.
