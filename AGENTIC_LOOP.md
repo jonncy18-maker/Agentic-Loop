@@ -235,9 +235,9 @@ archivos completos no lo necesita.
 
 | Rol | Fases | Default | Override |
 |---|---|---|---|
-| Goal Agent | 1, 2, 6 | `claude-opus-5` | `AGENTIC_LOOP_GOAL_MODEL` |
-| Build Agent | 3 y builds de Fase 5 | `claude-sonnet-5` | `AGENTIC_LOOP_BUILD_MODEL` |
-| Audit Agent | 4 y audits de Fase 5 | `claude-opus-5` | `AGENTIC_LOOP_AUDIT_MODEL` |
+| Goal Agent | 1, 2, 6 | `claude-opus-5-5` | `AGENTIC_LOOP_GOAL_MODEL` |
+| Build Agent | 3 y builds de Fase 5 | `claude-sonnet-5-5` | `AGENTIC_LOOP_BUILD_MODEL` |
+| Audit Agent | 4 y audits de Fase 5 | `claude-opus-5-5` | `AGENTIC_LOOP_AUDIT_MODEL` |
 
 ```bash
 # Correr todo el loop en un solo modelo

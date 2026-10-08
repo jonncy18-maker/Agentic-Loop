@@ -4,6 +4,10 @@
 
 Todo lo compartido con los demás agentes está en `AGENTS.md` (importado arriba). Este archivo contiene solo lo que aplica a Claude Code.
 
+## Subagent routing
+
+Follow "Subagent models" in `~/.claude/CLAUDE.md`: Haiku for searches, sweeps and mechanical edits, Sonnet for implementation and reviews, Opus for planning and final review. Agentic Loop phases map the same way: Build and Audit on Sonnet, Goal on Opus.
+
 ## Git workflow (set by John, 2026-10-03)
 
 - Commit finished work to **local `main`**. A short-lived local branch merged into local `main` is fine.
