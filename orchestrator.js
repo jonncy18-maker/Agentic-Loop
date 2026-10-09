@@ -29,9 +29,9 @@ import { parseVerdict, hasBlocker } from "./verdict.js";
 // Per-role models. Reasoning-heavy roles (contract authoring, audit judgment) get the
 // stronger model; bulk file emission does not need it. Override any role via env var.
 const DEFAULT_MODELS = {
-  goal: "claude-opus-5",
-  build: "claude-sonnet-5",
-  audit: "claude-opus-5",
+  goal: "claude-opus-5-5",
+  build: "claude-sonnet-5-5",
+  audit: "claude-opus-5-5",
 };
 
 export const MODELS = {
