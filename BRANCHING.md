@@ -35,9 +35,12 @@ For each finished agent branch:
 4. Drop anything the handoff note lists under "Scaffolding (do not merge)".
 5. Run `npm test` and `npm run build`.
 6. Merge into `main` (squash, to match the existing history): `git switch main && git merge --squash <agent>/<topic>`, then commit.
-7. **Delete the temporary branch once it is integrated.** Remove its worktree, then delete the local branch: `git worktree remove <path>` and `git branch -D <agent>/<topic>`. Delete the branch's handoff note as well.
-   For the GitHub copy: if it was merged through a PR, GitHub deletes it automatically. Otherwise delete it in the same push John approves for the merge (`git push origin --delete <agent>/<topic>`), or tell John it is still there.
-8. Confirm with `git branch -a` that no integrated branch is left behind.
+7. Once the merge is on GitHub (a PR merged with `--delete-branch` already removed the remote branch), **delete the merged branch everywhere** so nothing stale is left:
+   - Remote, if it is still there: `git push origin --delete <agent>/<topic>`.
+   - Local worktree and branch: `git worktree remove <path>` and `git branch -D <agent>/<topic>`.
+   - The branch's handoff note in `~/code/_inbox/`.
+   - Then `git fetch --prune` and `git merge --ff-only origin/main`, so local `main` matches GitHub.
+8. Confirm with `git branch -a` that only `main` (and any branch still in progress) is left.
 
 If a branch is declined instead of merged, delete it the same way and say so in one line.
 
